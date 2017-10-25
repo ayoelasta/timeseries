@@ -1,0 +1,137 @@
+---
+title: "timeseries"
+author: "Ayodeji Akiwowo"
+date: "25 October 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Time Series Analysis
+## A look at Facebook's Prophet and Forecast
+
+** Dataset **
+The data used is the Online Retail Dataset from the UCI Machine Learning Repository. It is a transactional data set which contains all the transactions occurring between 01/12/2010 and 09/12/2011 for a UK-based and registered non-store online retail.
+
+
+No of observations: 541909
+
+No of features: 8
+
+Features: 
+* InvoiceNo: Invoice number uniquely assigned to each transaction. If this code starts with letter ‘c’, it indicates a cancellation.
+
+* StockCode: Product (item) code uniquely assigned to each distinct product.
+
+* Description: Product (item) name.
+
+* Quantity: The quantities of each product (item) per transaction.
+
+* InvoiceDate: Invoice Date and time, the day and time when each transaction was generated.
+
+* UnitPrice: Unit price. Product price per unit in sterling.
+
+* CustomerID: Customer number uniquely assigned to each customer.
+
+* Country: Country name. The name of the country where each customer resides.
+
+**Loading libraries**
+```{r}
+library(prophet)
+library(tidyverse)
+library(tidyquant)
+library(modelr)
+library(gridExtra)
+library(grid)
+```
+
+## Read in Data
+
+The data was read in using read_csv which allows definition of formats for each variable. Additional variables for the day, time and month were created including income and income_return using dplyr's *mutate()*
+
+```{r message=FALSE, warning=FALSE}
+retail <- read_csv("data/onlineretail.csv",
+                   col_types = cols(
+                      InvoiceNo = col_character(),
+                      StockCode = col_character(),
+                      Description = col_character(),
+                      Quantity = col_integer(),
+                      InvoiceDate = col_datetime("%m/%d/%Y %H:%M"),
+                      UnitPrice = col_double(),
+                      CustomerID = col_integer(),
+                      Country = col_character()
+                      )) %>%
+  mutate(day = parse_date(format(InvoiceDate, "%Y-%m-%d")),
+         day_of_week = wday(day, label = TRUE),
+         time = parse_time(format(InvoiceDate, "%H:%M")),
+         month = format(InvoiceDate, "%m"),
+         income = Quantity * UnitPrice,
+         income_return = ifelse(Quantity > 0, "income", "return"))
+```
+
+```{r}
+head(retail)
+
+```
+```{r}
+summary(retail)
+```
+
+from the summary data, we can see that we have about 60% of the InvoiceDate and day_of_week data missing (NA's) and about 20% of the CustomerID data missing. There are some negative values in UnitPrice and Quantity which directly leads to negative values in Income. These negative values are classed as Returns for the business. To make it easier to understand our data, we will do some plots.
+
+
+```{r}
+p1 <- ggplot(retail, aes(InvoiceDate, UnitPrice)) + geom_point()
+p2 <- ggplot(retail, aes(InvoiceDate, Quantity)) + geom_point()
+
+grid.arrange(p1, p2, widths = c(0.5, 0.5))
+```
+
+As can be seen, there seems to be just one missing value for UnitPrice and a few for Quantity. In addition, there is one very high purchase which we are not sure if it's an outlier or not.
+
+
+
+```{r}
+p3 <- retail %>%
+  filter(Country == "United Kingdom") %>%
+  ggplot(aes(x = Country, fill = income_return)) +
+    geom_bar(alpha = 0.8) +
+    scale_fill_manual(values = palette_light()) +
+    theme_tq() +
+    theme(axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5)) +
+    guides(fill = FALSE) +
+    labs(x = "")
+
+p4 <- retail %>%
+  filter(Country != "United Kingdom") %>%
+  ggplot(aes(x = Country, fill = income_return)) +
+    geom_bar(alpha = 0.8) +
+    scale_fill_manual(values = palette_light()) +
+    theme_tq() +
+    theme(legend.position = "right") +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+    labs(x = "",
+         fill = "")
+
+grid.arrange(p3, p4, widths = c(0.2, 0.8))
+```
+
+The United Kingdom has the highest number of transactions followed by Germany and France. 
+
+This is a Time Series analysis therefore, we will now focus on time series data. Earlier whilst reading the data into R, we specified that the InvoiceDate should be read in Date format hence there is no need to repeat this step.
+
+Our first step will be to plot the number of transactions over time. April 2011 seems to be a good month for transactions whilst July 2011 shows high number of returns.
+
+```{r}
+retail %>%
+  ggplot(aes(x = day, color = income_return)) +
+    facet_grid(income_return ~ ., scales = "free") +
+    geom_freqpoly(bins = 100, size = 1, alpha = 0.8) +
+    scale_color_manual(values = palette_light()) +
+    theme_tq() +
+    guides(color = FALSE) +
+    labs(title = "Number of purchases/returns over time",
+         x = "")
+```
