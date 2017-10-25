@@ -89,12 +89,11 @@ From the summary data, we can see that we have about 60% of the InvoiceDate and 
 
 ```{r}
 p1 <- ggplot(retail, aes(InvoiceDate, Quantity)) + geom_point()
-p2 <- ggplot(retail, aes(InvoiceDate, Quantity)) + geom_point()
+p2 <- ggplot(retail, aes(InvoiceDate, UnitPrice)) + geom_point()
 
 grid.arrange(p1, p2)
 
 ```
-
 
 
 As can be seen, there seems to be just one missing value for UnitPrice and a few for Quantity. In addition, there is one very high purchase which we are not sure if it's an outlier or not. We will investigate this further. The first step is to identify the transaction.
@@ -105,9 +104,6 @@ retail %>% filter(Quantity < -50000)
 ```
 
 There are 2 transactions where the Quantity is greater than 50, 000. One has an unknown InvoiceDate hence is not included in our TS plot and the other took place on 12/09/2011 at 9:15AM (PAPER CRAFT , LITTLE BIRDIE). These two transactions seem to be a mistake by the person who made the order because we can see that both transactions were cancelled after they were made (twelve minutes later for the PAPER CRAFT, LITTLE BIRDIE product).
-
-
-retail <- filter(retail, day >= as.Date("01/12/2010", format = "%d/%m/%Y"))
 
 
 
@@ -287,6 +283,7 @@ customer_purch %>%
     labs(x = "", 
          y = "")
 ```
+** Create Features **
 ```{r}
 most_sold <- retail %>%
   group_by(day, StockCode, Description) %>%
@@ -399,6 +396,8 @@ retail_p_day <- distinct(select(retail, day, day_of_week, month)) %>%
 
 
 The additional features created will now be joined with the retail dataset to form the retail_p_day dataset. This will be used for modeling our time series.
+
+Create a column called model and label data up to 1st of November 2011 as train and all after that as test
 ```{r}
 retail_p_day <- retail_p_day %>%
   mutate(model = ifelse(day <= "2011-11-01", "train", "test"))
@@ -406,6 +405,25 @@ retail_p_day <- retail_p_day %>%
 colnames(retail_p_day)[grep("^[0-9]+", colnames(retail_p_day))] <- paste0("P_", colnames(retail_p_day)[grep("^[0-9]+", colnames(retail_p_day))])
 ```
 
+
+##Prophet
+Prophet developers claim the default parameters are good enough to provide good predictions. Like many prediction packages, there are two steps to  making a prediction: 
+
+1. build a model using the prophet() function and 
+
+2. predict future values using the model.
+
+*prophet(df = NULL, growth = "linear", changepoints = NULL,*
+  *n.changepoints = 25, yearly.seasonality = "auto",*
+  *weekly.seasonality = "auto", daily.seasonality = "auto",*
+  *holidays = NULL, seasonality.prior.scale = 10,*
+  *holidays.prior.scale = 10, changepoint.prior.scale = 0.05,*
+  *mcmc.samples = 0, interval.width = 0.8, uncertainty.samples = 1000,*
+  *fit = TRUE, ...)*
+
+The parameters for the prophet() function are:
+
+Plotting the training and test data:
 ```{r}
 retail_p_day %>%
   ggplot(aes(x = day, y = sum_income, color = model)) +
@@ -415,6 +433,50 @@ retail_p_day %>%
     theme_tq()
 ```
 
-##Prophet
+
+Create the training and test data and remember to rename the date column as 'ds' as this is mandatory for pProphet to work.
+
+```{r}
+train <- filter(retail_p_day, model == "train") %>%
+  select(day, sum_income) %>%
+  rename(ds = day,
+         y = sum_income)
+
+test <- filter(retail_p_day, model == "test") %>%
+  select(day, sum_income) %>%
+  rename(ds = day)
+```
+
+One of Prophet's strengths is the ability to handle missing data. In a time series data like the one we have used, there will be days when there are no transactions. I will use the missing data in the dataset as 'holidays'
+
+```{r}
+off_days <- data.frame(ds = as.Date(c("2010-12-24", "2010-12-25", "2010-12-26", "2010-12-27", "2010-12-28", 
+                                      "2010-12-29", "2010-12-30", "2010-01-01", "2010-01-02", "2010-01-03",
+                                      "2011-04-22", "2011-04-23", "2011-04-24", "2011-04-25", "2011-05-02", 
+                                      "2011-05-30", "2011-08-29", "2011-04-29", "2011-04-30"))) %>%
+  mutate(holiday = paste0("off_day_", seq_along(1:length(ds))))
+```
 
 
+```{r}
+prophet_model_test <- prophet(train, 
+                              growth = "linear", # growth curve trend
+                              n.changepoints = 100, # Prophet automatically detects changes in trends by selecting changepoints from the data
+                              yearly.seasonality = FALSE, # yearly seasonal component using Fourier series
+                              weekly.seasonality = TRUE, # weekly seasonal component using dummy variables
+                              holidays = off_days)
+```
+
+```{r}
+forecast_test <- predict(prophet_model_test, test)
+```
+
+```{r}
+# forecast_test %>%
+#   mutate(resid = sum_income - yhat) %>%
+#   ggplot(aes(x = ds, y = resid)) +
+#     geom_hline(yintercept = 0, color = "red") +
+#     geom_point(alpha = 0.5, color = palette_light()[[1]]) +
+#     geom_smooth() +
+#     theme_tq()
+```
