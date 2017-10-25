@@ -45,6 +45,11 @@ library(tidyquant)
 library(modelr)
 library(gridExtra)
 library(grid)
+library(caret)
+library(broom)
+library(timetk)
+library(highcharter)
+options(na.action = na.warn)
 ```
 
 ## Read in Data
@@ -58,7 +63,7 @@ retail <- read_csv("data/onlineretail.csv",
                       StockCode = col_character(),
                       Description = col_character(),
                       Quantity = col_integer(),
-                      InvoiceDate = col_datetime("%m/%d/%Y %H:%M"),
+                      InvoiceDate = col_datetime("%d/%m/%Y %H:%M"),
                       UnitPrice = col_double(),
                       CustomerID = col_integer(),
                       Country = col_character()
@@ -79,17 +84,30 @@ head(retail)
 summary(retail)
 ```
 
-from the summary data, we can see that we have about 60% of the InvoiceDate and day_of_week data missing (NA's) and about 20% of the CustomerID data missing. There are some negative values in UnitPrice and Quantity which directly leads to negative values in Income. These negative values are classed as Returns for the business. To make it easier to understand our data, we will do some plots.
+From the summary data, we can see that we have about 60% of the InvoiceDate and day_of_week data missing (NA's) and about 20% of the CustomerID data missing. There are some negative values in UnitPrice and Quantity which directly leads to negative values in Income. These negative values are classed as Returns for the business. To make it easier to understand our data, we will do some plots.
 
 
 ```{r}
-p1 <- ggplot(retail, aes(InvoiceDate, UnitPrice)) + geom_point()
+p1 <- ggplot(retail, aes(InvoiceDate, Quantity)) + geom_point()
 p2 <- ggplot(retail, aes(InvoiceDate, Quantity)) + geom_point()
 
-grid.arrange(p1, p2, widths = c(0.5, 0.5))
+grid.arrange(p1, p2)
+
 ```
 
-As can be seen, there seems to be just one missing value for UnitPrice and a few for Quantity. In addition, there is one very high purchase which we are not sure if it's an outlier or not.
+
+
+As can be seen, there seems to be just one missing value for UnitPrice and a few for Quantity. In addition, there is one very high purchase which we are not sure if it's an outlier or not. We will investigate this further. The first step is to identify the transaction.
+
+```{r}
+retail %>% filter(Quantity >50000)
+retail %>% filter(Quantity < -50000)
+```
+
+There are 2 transactions where the Quantity is greater than 50, 000. One has an unknown InvoiceDate hence is not included in our TS plot and the other took place on 12/09/2011 at 9:15AM (PAPER CRAFT , LITTLE BIRDIE). These two transactions seem to be a mistake by the person who made the order because we can see that both transactions were cancelled after they were made (twelve minutes later for the PAPER CRAFT, LITTLE BIRDIE product).
+
+
+retail <- filter(retail, day >= as.Date("01/12/2010", format = "%d/%m/%Y"))
 
 
 
@@ -126,12 +144,277 @@ Our first step will be to plot the number of transactions over time. April 2011 
 
 ```{r}
 retail %>%
-  ggplot(aes(x = day, color = income_return)) +
+  ggplot(aes(x = day, color = income_return)) + geom_freqpoly(bins = 100, size = 1, alpha = 0.8) +
     facet_grid(income_return ~ ., scales = "free") +
-    geom_freqpoly(bins = 100, size = 1, alpha = 0.8) +
     scale_color_manual(values = palette_light()) +
-    theme_tq() +
+    theme_bw() +
     guides(color = FALSE) +
     labs(title = "Number of purchases/returns over time",
          x = "")
 ```
+
+
+
+
+```{r}
+retail %>%
+  ggplot(aes(x = day, y = ..density.., color = income_return)) +
+    geom_freqpoly(size = 1, alpha = 0.8, bins = 100) +
+    scale_color_manual(values = palette_light()) +
+    theme_tq() +
+    labs(title = "Density of purchases/returns over time",
+         x = "",
+         color = "")
+```
+
+
+```{r}
+
+retail %>%
+  group_by(day, income_return) %>%
+  summarise(sum_income = sum(income)) %>%
+  ggplot(aes(x = day, y = sum_income, color = income_return)) +
+    facet_grid(income_return ~ ., scales = "free") +
+    geom_ref_line(h = 0, colour = "grey") +
+    geom_line(size = 1, alpha = 0.8) +
+    scale_color_manual(values = palette_light()) +
+    theme_tq() +
+    guides(color = FALSE) +
+    labs(title = "Income/loss from transactions per day",
+         x = "",
+         y = "sum of income/losses",
+         color = "")
+```
+
+
+    ```{r}
+retail %>%
+  ggplot(aes(x = time, y = day)) +
+    stat_bin2d(alpha = 0.8, bins = 25, color = "white") +
+    scale_fill_gradientn(colours = c(palette_light()[[1]], palette_light()[[2]])) +
+    theme_tq() +
+    theme(legend.position = "right") +
+    labs(title = "Purchases/returns per day and time")
+```
+
+```{r}
+retail %>%
+  mutate(day2 = format(InvoiceDate, "%d")) %>%
+  group_by(month, day2) %>%
+  summarise(sum_income = sum(income)) %>%
+  ggplot(aes(x = month, y = day2, fill = sum_income)) +
+    geom_tile(alpha = 0.8, color = "white") +
+    scale_fill_gradientn(colours = c(palette_light()[[1]], palette_light()[[2]])) +
+    theme_tq() +
+    theme(legend.position = "right") +
+    labs(title = "Net income per month and day",
+         y = "day of the month",
+         fill = "net sum of income")
+```
+When we plot transactions of the day of the month against the month, we can see for each month, what days are active. For example, in December, a lot of activity take place at the beginning of the month. We can do same to see what time of the day transactions occur.
+
+```{r}
+retail %>%
+  ggplot(aes(x = day_of_week, y = time)) +
+    stat_bin2d(alpha = 0.8, bins = 25, color = "white") +
+    scale_fill_gradientn(colours = c(palette_light()[[1]], palette_light()[[2]])) +
+    theme_tq() +
+    theme(legend.position = "right") +
+    labs(title = "Net Income per day and time")
+```
+A lot of transactions take place just before 4pm Mondays to Wednesdays. Thursdays are very busy 6am to just after 8pm though majority transactions take place just before 10am and 8pm.
+
+** Repeat Customers **
+
+We can see from the plot below that there are over 60% repeat buyers on this dataset.
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+rep_customer <- retail %>%
+  group_by(day, CustomerID) %>%
+  summarise(sum = sum(Quantity)) %>%
+  group_by(CustomerID) %>%
+  summarise(n = n()) %>%
+  mutate(repeat_customer = ifelse(n > 1, "repeat_cust", "one_time_cust"))
+
+length(which(rep_customer$repeat_customer == "repeat_cust"))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+rep_customer_day <- left_join(retail, rep_customer, by = "CustomerID") %>%
+  distinct(day, CustomerID, repeat_customer) %>%
+  group_by(day, repeat_customer) %>%
+  summarise(n = n()) %>%
+  spread(key = repeat_customer, value = n)
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+rep_customer %>%
+  group_by(repeat_customer) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n)) %>%
+  ggplot(aes(x = "", y = prop, fill = repeat_customer)) +
+    geom_bar(stat = "identity", alpha = 0.8) +
+    coord_polar("y", start = 0) +
+    scale_fill_manual(values = palette_light()) +
+    theme_tq() +
+    theme(legend.position = "right") +
+    labs(x = "",
+         y = "",
+         fill = "",
+         title = "Proportion of one-time & repeat customers")
+```
+
+```{r}
+customer_purch <- retail %>%
+  group_by(day, CustomerID) %>%
+  summarise(n = n(),
+            sum_it = sum(Quantity),
+            sum_in = sum(income)) %>%
+  group_by(day) %>%
+  summarise(mean_in_cust = mean(sum_in),
+            mean_quant_cust = mean(sum_it),
+            mean_items_cust = mean(n))
+```
+
+```{r}
+customer_purch %>%
+  gather(x, y, mean_in_cust:mean_items_cust) %>%
+  ggplot(aes(x = day, y = y)) +
+    facet_wrap(~ x, ncol = 1, scales = "free") +
+    geom_line(color = palette_light()[[1]], size = 1, alpha = 0.8) +
+    geom_smooth(color = palette_light()[[2]], method = 'loess') +
+    theme_tq() +
+    labs(x = "", 
+         y = "")
+```
+```{r}
+most_sold <- retail %>%
+  group_by(day, StockCode, Description) %>%
+  summarise(sum = sum(Quantity)) %>%
+  group_by(StockCode, Description) %>%
+  summarise(n = n()) %>%
+  arrange(-n)
+```
+
+
+```{r}
+income <- retail %>%
+  group_by(day) %>%
+  summarise(sum_income = sum(income),
+            mean_income = mean(income),
+            sum_quantity = sum(Quantity),
+            mean_quantity = mean(Quantity))
+```
+
+```{r}
+purchases <- retail %>%
+  filter(income > 0) %>%
+  group_by(day) %>%
+  summarise(sum_income_purch = sum(income),
+            mean_income_purch = mean(income),
+            sum_quantity_purch = sum(Quantity),
+            mean_quantity_purch = mean(Quantity))
+```
+
+```{r}
+returns <- retail %>%
+  filter(income < 0) %>%
+  group_by(day) %>%
+  summarise(sum_income_return = sum(income),
+            mean_income_return = mean(income),
+            sum_quantity_return = sum(Quantity),
+            mean_quantity_return = mean(Quantity))
+```
+
+```{r}
+temp <- distinct(select(retail, day, StockCode, UnitPrice)) %>%
+  mutate(temp = paste(day, StockCode, sep = "_")) %>%
+  select(temp, UnitPrice)
+
+mean_unit_price <- retail %>%
+  filter(income_return == "income") %>%
+  group_by(day, StockCode) %>%
+  summarise(n = n()) %>%
+  mutate(temp = paste(day, StockCode, sep = "_")) %>%
+  left_join(temp, by = "temp") %>%
+  group_by(day, StockCode) %>%
+  summarise(mean = mean(UnitPrice)) %>%
+  group_by(day) %>%
+  summarise(mean_unit_price = mean(mean))
+```
+
+
+```{r}
+most_sold_day <- retail %>%
+  filter(StockCode %in% most_sold$StockCode[1:10]) %>%
+  group_by(day, StockCode) %>%
+  summarise(sum = sum(Quantity)) %>%
+  spread(key = StockCode, value = sum)
+```
+
+
+```{r}
+income_return <- retail %>%
+  group_by(day, income_return) %>%
+  summarise(sum = sum(Quantity)) %>%
+  spread(key = income_return, value = sum)
+```
+
+
+```{r}
+country_purch <- retail %>%
+  mutate(Country2 = ifelse(Country == "United Kingdom", "uk", "other_country")) %>%
+  group_by(day, Country2) %>%
+  summarise(sum = sum(Quantity)) %>%
+  spread(key = Country2, value = sum) %>%
+  mutate(prop_other_country = other_country / sum(other_country + uk),
+         prop_uk = uk / sum(other_country + uk))
+```
+
+```{r}
+n_items <- retail %>%
+  group_by(day, StockCode) %>%
+  summarise(n = n()) %>%
+  group_by(day) %>%
+  summarise(n_items = n())
+```
+
+```{r}
+retail_p_day <- distinct(select(retail, day, day_of_week, month)) %>%
+  left_join(income, by = "day") %>%
+  left_join(mean_unit_price, by = "day") %>%
+  left_join(purchases, by = "day") %>%
+  left_join(returns, by = "day") %>%
+  left_join(customer_purch, by = "day") %>%
+  left_join(rep_customer_day, by = "day") %>%
+  left_join(income_return, by = "day") %>%
+  left_join(country_purch, by = "day") %>%
+  left_join(n_items, by = "day") %>%
+  left_join(most_sold_day, by = "day") %>%
+  mutate(diff_sum_income = sum_income - lag(sum_income),
+         season = ifelse(month %in% c("03", "04", "05"), "spring",
+                         ifelse(month %in% c("06", "07", "08"), "summer",
+                                ifelse(month %in% c("09", "10", "11"), "fall", "winter"))))
+```
+
+
+The additional features created will now be joined with the retail dataset to form the retail_p_day dataset. This will be used for modeling our time series.
+```{r}
+retail_p_day <- retail_p_day %>%
+  mutate(model = ifelse(day <= "2011-11-01", "train", "test"))
+
+colnames(retail_p_day)[grep("^[0-9]+", colnames(retail_p_day))] <- paste0("P_", colnames(retail_p_day)[grep("^[0-9]+", colnames(retail_p_day))])
+```
+
+```{r}
+retail_p_day %>%
+  ggplot(aes(x = day, y = sum_income, color = model)) +
+    geom_point(alpha = 0.5) +
+    geom_line(alpha = 0.5) +
+    scale_color_manual(values = palette_light()) +
+    theme_tq()
+```
+
+##Prophet
+
+
