@@ -128,6 +128,7 @@ $(document).ready(function () {
 <h1>Time Series Analysis</h1>
 <div id="a-look-at-facebooks-prophet-and-forecast" class="section level2">
 <h2>A look at Facebook’s Prophet and Forecast</h2>
+<p>This comparison is sourced from <a href="https://shiring.github.io/forecasting/2017/06/13/retail_forcasting_part3">“Data Science for Business - Time Series Forecasting”</a> website</p>
 <p>** Dataset ** The data used is the Online Retail Dataset from the UCI Machine Learning Repository. It is a transactional data set which contains all the transactions occurring between 01/12/2010 and 09/12/2011 for a UK-based and registered non-store online retail.</p>
 <p>No of observations: 541909</p>
 <p>No of features: 8</p>
@@ -142,83 +143,6 @@ $(document).ready(function () {
 <li><p>Country: Country name. The name of the country where each customer resides.</p></li>
 </ul>
 <p><strong>Loading libraries</strong></p>
-<pre class="r"><code>library(prophet)</code></pre>
-<pre><code>## Loading required package: Rcpp</code></pre>
-<pre class="r"><code>library(tidyverse)</code></pre>
-<pre><code>## Loading tidyverse: ggplot2
-## Loading tidyverse: tibble
-## Loading tidyverse: tidyr
-## Loading tidyverse: readr
-## Loading tidyverse: purrr
-## Loading tidyverse: dplyr</code></pre>
-<pre><code>## Conflicts with tidy packages ----------------------------------------------</code></pre>
-<pre><code>## filter(): dplyr, stats
-## lag():    dplyr, stats</code></pre>
-<pre class="r"><code>library(tidyquant)</code></pre>
-<pre><code>## Warning: package 'tidyquant' was built under R version 3.4.2</code></pre>
-<pre><code>## Loading required package: lubridate</code></pre>
-<pre><code>## 
-## Attaching package: 'lubridate'</code></pre>
-<pre><code>## The following object is masked from 'package:base':
-## 
-##     date</code></pre>
-<pre><code>## Loading required package: PerformanceAnalytics</code></pre>
-<pre><code>## Warning: package 'PerformanceAnalytics' was built under R version 3.4.2</code></pre>
-<pre><code>## Loading required package: xts</code></pre>
-<pre><code>## Loading required package: zoo</code></pre>
-<pre><code>## 
-## Attaching package: 'zoo'</code></pre>
-<pre><code>## The following objects are masked from 'package:base':
-## 
-##     as.Date, as.Date.numeric</code></pre>
-<pre><code>## 
-## Attaching package: 'xts'</code></pre>
-<pre><code>## The following objects are masked from 'package:dplyr':
-## 
-##     first, last</code></pre>
-<pre><code>## 
-## Attaching package: 'PerformanceAnalytics'</code></pre>
-<pre><code>## The following object is masked from 'package:graphics':
-## 
-##     legend</code></pre>
-<pre><code>## Loading required package: quantmod</code></pre>
-<pre><code>## Loading required package: TTR</code></pre>
-<pre><code>## Version 0.4-0 included new data defaults. See ?getSymbols.</code></pre>
-<pre><code>## 
-## Attaching package: 'tidyquant'</code></pre>
-<pre><code>## The following object is masked from 'package:dplyr':
-## 
-##     as_tibble</code></pre>
-<pre><code>## The following object is masked from 'package:tibble':
-## 
-##     as_tibble</code></pre>
-<pre class="r"><code>library(modelr)
-library(gridExtra)</code></pre>
-<pre><code>## 
-## Attaching package: 'gridExtra'</code></pre>
-<pre><code>## The following object is masked from 'package:dplyr':
-## 
-##     combine</code></pre>
-<pre class="r"><code>library(grid)
-library(caret)</code></pre>
-<pre><code>## Loading required package: lattice</code></pre>
-<pre><code>## 
-## Attaching package: 'caret'</code></pre>
-<pre><code>## The following object is masked from 'package:purrr':
-## 
-##     lift</code></pre>
-<pre class="r"><code>library(broom)</code></pre>
-<pre><code>## 
-## Attaching package: 'broom'</code></pre>
-<pre><code>## The following object is masked from 'package:modelr':
-## 
-##     bootstrap</code></pre>
-<pre class="r"><code>library(timetk)</code></pre>
-<pre><code>## Warning: package 'timetk' was built under R version 3.4.2</code></pre>
-<pre class="r"><code>library(highcharter)</code></pre>
-<pre><code>## Highcharts (www.highcharts.com) is a Highsoft software product which is</code></pre>
-<pre><code>## not free for commercial and Governmental use</code></pre>
-<pre class="r"><code>options(na.action = na.warn)</code></pre>
 </div>
 <div id="read-in-data" class="section level2">
 <h2>Read in Data</h2>
@@ -559,15 +483,17 @@ test &lt;- filter(retail_p_day, model == &quot;test&quot;) %&gt;%
 <pre><code>## Initial log joint probability = -8.3297
 ## Optimization terminated normally: 
 ##   Convergence detected: relative gradient magnitude is below tolerance</code></pre>
-<pre class="r"><code>forecast_test &lt;- predict(prophet_model_test, test)</code></pre>
-<pre><code>## Warning: Unknown or uninitialised column: 'y'.</code></pre>
-<pre class="r"><code># forecast_test %&gt;%
-#   mutate(resid = sum_income - yhat) %&gt;%
-#   ggplot(aes(x = ds, y = resid)) +
-#     geom_hline(yintercept = 0, color = &quot;red&quot;) +
-#     geom_point(alpha = 0.5, color = palette_light()[[1]]) +
-#     geom_smooth() +
-#     theme_tq()</code></pre>
+<pre class="r"><code>test1 &lt;- test[,&quot;ds&quot;]
+
+future &lt;- make_future_dataframe(prophet_model_test, periods = 33)</code></pre>
+<pre class="r"><code>forecast_test &lt;- predict(prophet_model_test, future)</code></pre>
+<!-- forecast_test %>% -->
+<!--   mutate(resid = sum_income - yhat) %>% -->
+<!--   ggplot(aes(x = ds, y = resid)) + -->
+<!--     geom_hline(yintercept = 0, color = "red") + -->
+<!--     geom_point(alpha = 0.5, color = palette_light()[[1]]) + -->
+<!--     geom_smooth() + -->
+<!--     theme_tq() -->
 </div>
 </div>
 

@@ -11,6 +11,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Time Series Analysis
 ## A look at Facebook's Prophet and Forecast
+This comparison is sourced from ["Data Science for Business - Time Series Forecasting"](https://shiring.github.io/forecasting/2017/06/13/retail_forcasting_part3) website
+
+
 
 ** Dataset **
 The data used is the Online Retail Dataset from the UCI Machine Learning Repository. It is a transactional data set which contains all the transactions occurring between 01/12/2010 and 09/12/2011 for a UK-based and registered non-store online retail.
@@ -38,7 +41,7 @@ Features:
 * Country: Country name. The name of the country where each customer resides.
 
 **Loading libraries**
-```{r}
+```{r, message=FALSE, warning=FALSE, include=FALSE}
 library(prophet)
 library(tidyverse)
 library(tidyquant)
@@ -477,12 +480,11 @@ future <- make_future_dataframe(prophet_model_test, periods = 33)
 forecast_test <- predict(prophet_model_test, future)
 ```
 
-```{r}
-forecast_test %>%
-  mutate(resid = sum_income - yhat) %>%
-  ggplot(aes(x = ds, y = resid)) +
-    geom_hline(yintercept = 0, color = "red") +
-    geom_point(alpha = 0.5, color = palette_light()[[1]]) +
-    geom_smooth() +
-    theme_tq()
-```
+
+<!-- forecast_test %>% -->
+<!--   mutate(resid = sum_income - yhat) %>% -->
+<!--   ggplot(aes(x = ds, y = resid)) + -->
+<!--     geom_hline(yintercept = 0, color = "red") + -->
+<!--     geom_point(alpha = 0.5, color = palette_light()[[1]]) + -->
+<!--     geom_smooth() + -->
+<!--     theme_tq() -->
