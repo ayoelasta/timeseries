@@ -466,17 +466,23 @@ prophet_model_test <- prophet(train,
                               weekly.seasonality = TRUE, # weekly seasonal component using dummy variables
                               holidays = off_days)
 ```
+```{r}
+test1 <- test[,"ds"]
+
+future <- make_future_dataframe(prophet_model_test, periods = 33)
+```
+
 
 ```{r}
-forecast_test <- predict(prophet_model_test, test)
+forecast_test <- predict(prophet_model_test, future)
 ```
 
 ```{r}
-# forecast_test %>%
-#   mutate(resid = sum_income - yhat) %>%
-#   ggplot(aes(x = ds, y = resid)) +
-#     geom_hline(yintercept = 0, color = "red") +
-#     geom_point(alpha = 0.5, color = palette_light()[[1]]) +
-#     geom_smooth() +
-#     theme_tq()
+forecast_test %>%
+  mutate(resid = sum_income - yhat) %>%
+  ggplot(aes(x = ds, y = resid)) +
+    geom_hline(yintercept = 0, color = "red") +
+    geom_point(alpha = 0.5, color = palette_light()[[1]]) +
+    geom_smooth() +
+    theme_tq()
 ```
